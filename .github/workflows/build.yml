@@ -27,13 +27,7 @@ jobs:
           cd app
           cordova platform add android
           
-          # Жестко очищаем дефолтный шаблон Cordova и копируем твою игру
-          rm -rf www/*
-          cp -r ../css ./www/ || true
-          cp -r ../js ./www/ || true
-          cp ../index.html ./www/ || true
-          
-          # Настраиваем иконку и альбомный (горизонтальный) режим экрана
+          # Настраиваем иконку и горизонтальный режим в config.xml
           if [ -f ../icon.png ]; then
             cp ../icon.png ./icon.png
             echo '<widget id="com.mycompany.mygame" version="1.0.0" xmlns="http://w3.org" xmlns:cdv="http://apache.org">' > config.xml
@@ -46,6 +40,17 @@ jobs:
             echo '</widget>' >> config.xml
           fi
           
+          # Запускаем подготовку платформы, чтобы Cordova создала все папки Android
+          cordova prepare android
+          
+          # Жестко заменяем дефолтные файлы Cordova на файлы твоей игры прямо в ресурсах Android-приложения
+          TARGET_DIR="platforms/android/app/src/main/assets/www"
+          rm -rf $TARGET_DIR/*
+          cp -r ../css $TARGET_DIR/ || true
+          cp -r ../js $TARGET_DIR/ || true
+          cp ../index.html $TARGET_DIR/ || true
+          
+          # Финальная компиляция
           cordova build android
 
       - name: Upload APK
