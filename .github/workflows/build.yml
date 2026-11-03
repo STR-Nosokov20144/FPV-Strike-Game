@@ -26,10 +26,26 @@ jobs:
           cordova create app com.mycompany.mygame "FPV Strike"
           cd app
           cordova platform add android
+          
+          # Жестко очищаем дефолтный шаблон Cordova и копируем твою игру
           rm -rf www/*
           cp -r ../css ./www/ || true
           cp -r ../js ./www/ || true
           cp ../index.html ./www/ || true
+          
+          # Настраиваем иконку и альбомный (горизонтальный) режим экрана
+          if [ -f ../icon.png ]; then
+            cp ../icon.png ./icon.png
+            echo '<widget id="com.mycompany.mygame" version="1.0.0" xmlns="http://w3.org" xmlns:cdv="http://apache.org">' > config.xml
+            echo '  <name>FPV Strike</name>' >> config.xml
+            echo '  <description>FPV Strike Game</description>' >> config.xml
+            echo '  <author email="dev@mycompany.com" href="http://mycompany.com">Developer</author>' >> config.xml
+            echo '  <content src="index.html" />' >> config.xml
+            echo '  <icon src="icon.png" />' >> config.xml
+            echo '  <preference name="Orientation" value="landscape" />' >> config.xml
+            echo '</widget>' >> config.xml
+          fi
+          
           cordova build android
 
       - name: Upload APK
