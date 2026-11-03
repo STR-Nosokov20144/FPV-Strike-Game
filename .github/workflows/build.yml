@@ -7,6 +7,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Принудительно ставим самые свежие версии, которые требует GitHub
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -21,47 +22,37 @@ jobs:
       - name: Install Cordova
         run: npm install -g cordova
 
-      - name: Create Cordova Project
+      - name: Build Game
         run: |
-          # 1. Создаем проект Cordova
-          cordova create app com.mycompany.mygame "FPV Strike"
+          # Создаем чистый проект Cordova
+          cordova create app com.mygame.fpvstrike "FPV Strike"
           cd app
           cordova platform add android
           
-          # 2. Настраиваем конфиг (иконка, ландшафт, отключение сплэшскрина)
-          if [ -f ../icon.png ]; then
-            cp ../icon.png ./icon.png
-            echo '<widget id="com.mycompany.mygame" version="1.0.0" xmlns="http://w3.org" xmlns:cdv="http://apache.org">' > config.xml
-            echo '  <name>FPV Strike</name>' >> config.xml
-            echo '  <description>FPV Strike Game</description>' >> config.xml
-            echo '  <author email="dev@mycompany.com" href="http://mycompany.com">Developer</author>' >> config.xml
-            echo '  <content src="index.html" />' >> config.xml
-            echo '  <icon src="icon.png" />' >> config.xml
-            echo '  <preference name="Orientation" value="landscape" />' >> config.xml
-            echo '  <preference name="SplashScreen" value="none" />' >> config.xml
-            echo '  <preference name="AutoHideSplashScreen" value="true" />' >> config.xml
-            echo '  <preference name="ShowSplashScreenSpinner" value="false" />' >> config.xml
-            echo '</widget>' >> config.xml
-          fi
-          
-          # 3. Умный поиск папки с игрой
-          GAME_DIR=$(find .. -name "index.html" ! -path "*/app/*" -exec dirname {} \; | head -n 1)
-          
-          # Очищаем дефолтный шаблон Cordova
+          # Намертво вырезаем дефолтного робота и заставки
           rm -rf www/*
           
-          # Копируем всё содержимое из папки с твоей игрой в проект
-          cp -r $GAME_DIR/* ./www/
+          # Копируем ТВОИ файлы игры из корня репозитория прямо в Cordova
+          cp ../index.html ./www/ || true
+          cp -r ../css ./www/ || true
+          cp -r ../js ./www/ || true
           
-          # Синхронизируем платформу Android
-          cordova prepare android
+          # Переносим иконку, если она есть
+          if [ -f ../icon.png ]; then
+            cp ../icon.png ./icon.png
+          fi
           
-          # Принудительно дублируем файлы в финальные ассеты Android
-          TARGET_DIR="platforms/android/app/src/main/assets/www"
-          rm -rf $TARGET_DIR/*
-          cp -r ./www/* $TARGET_DIR/
+          # Создаем самый простой, чистый конфиг без плагинов заставок
+          echo '<widget id="com.mygame.fpvstrike" version="1.0.0" xmlns="http://w3.org">' > config.xml
+          echo '  <name>FPV Strike</name>' >> config.xml
+          echo '  <content src="index.html" />' >> config.xml
+          echo '  <preference name="Orientation" value="landscape" />' >> config.xml
+          if [ -f ./icon.png ]; then
+            echo '  <icon src="icon.png" />' >> config.xml
+          fi
+          echo '</widget>' >> config.xml
           
-          # Собираем финальный APK
+          # Финальная чистая сборка
           cordova build android
 
       - name: Upload APK
