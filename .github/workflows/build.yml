@@ -7,7 +7,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Принудительно ставим самые свежие версии, которые требует GitHub
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -24,25 +23,31 @@ jobs:
 
       - name: Build Game
         run: |
-          # Создаем чистый проект Cordova
+          # 1. Создаем проект Cordova
           cordova create app com.mygame.fpvstrike "FPV Strike"
           cd app
           cordova platform add android
           
-          # Намертво вырезаем дефолтного робота и заставки
+          # Намертво чистим дефолтный шаблон
           rm -rf www/*
           
-          # Копируем ТВОИ файлы игры из корня репозитория прямо в Cordova
-          cp ../index.html ./www/ || true
-          cp -r ../css ./www/ || true
-          cp -r ../js ./www/ || true
+          # 2. УМНЫЙ ПОИСК: ищем, в какой именно папке на GitHub лежит твой index.html
+          # (игнорируем папку самого приложения 'app', которую мы только что создали)
+          REAL_GAME_DIR=$(find .. -name "index.html" ! -path "*/app/*" -exec dirname {} \; | head -n 1)
           
-          # Переносим иконку, если она есть
+          echo "Твоя игра найдена в папке: $REAL_GAME_DIR"
+          
+          # Насильно копируем абсолютно ВСЁ из папки с твоей игрой в сборку
+          cp -r $REAL_GAME_DIR/* ./www/
+          
+          # 3. Переносим иконку из корня репозитория или из папки с игрой
           if [ -f ../icon.png ]; then
             cp ../icon.png ./icon.png
+          elif [ -f $REAL_GAME_DIR/icon.png ]; then
+            cp $REAL_GAME_DIR/icon.png ./icon.png
           fi
           
-          # Создаем самый простой, чистый конфиг без плагинов заставок
+          # 4. Создаем чистый конфигурационный файл
           echo '<widget id="com.mygame.fpvstrike" version="1.0.0" xmlns="http://w3.org">' > config.xml
           echo '  <name>FPV Strike</name>' >> config.xml
           echo '  <content src="index.html" />' >> config.xml
@@ -52,7 +57,13 @@ jobs:
           fi
           echo '</widget>' >> config.xml
           
-          # Финальная чистая сборка
+          # 5. Принудительно дублируем файлы в ассеты платформы, чтобы Android их точно сожрал
+          cordova prepare android
+          TARGET_ASSETS="platforms/android/app/src/main/assets/www"
+          rm -rf $TARGET_ASSETS/*
+          cp -r ./www/* $TARGET_ASSETS/
+          
+          # Финальная сборка
           cordova build android
 
       - name: Upload APK
