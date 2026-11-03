@@ -7,54 +7,89 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
 
-      - name: Install Cordova
-        run: npm install -g cordova
-
-      - name: Create Cordova Project
+      - name: Create Clean Android App
         run: |
-          cordova create app com.mycompany.mygame "FPV Strike"
-          cd app
-          cordova platform add android
+          mkdir -p android_app/app/src/main/java/com/mygame/fpvstrike
+          mkdir -p android_app/app/src/main/res/layout
+          mkdir -p android_app/app/src/main/res/values
+          mkdir -p android_app/app/src/main/assets/www
           
-          # Настраиваем иконку и горизонтальный режим в config.xml
-          if [ -f ../icon.png ]; then
-            cp ../icon.png ./icon.png
-            echo '<widget id="com.mycompany.mygame" version="1.0.0" xmlns="http://w3.org" xmlns:cdv="http://apache.org">' > config.xml
-            echo '  <name>FPV Strike</name>' >> config.xml
-            echo '  <description>FPV Strike Game</description>' >> config.xml
-            echo '  <author email="dev@mycompany.com" href="http://mycompany.com">Developer</author>' >> config.xml
-            echo '  <content src="index.html" />' >> config.xml
-            echo '  <icon src="icon.png" />' >> config.xml
-            echo '  <preference name="Orientation" value="landscape" />' >> config.xml
-            echo '</widget>' >> config.xml
-          fi
+          # 1. Копируем файлы твоей игры
+          cp -r css android_app/app/src/main/assets/www/ || true
+          cp -r js android_app/app/src/main/assets/www/ || true
+          cp index.html android_app/app/src/main/assets/www/ || true
           
-          # Запускаем подготовку платформы, чтобы Cordova создала все папки Android
-          cordova prepare android
-          
-          # Жестко заменяем дефолтные файлы Cordova на файлы твоей игры прямо в ресурсах Android-приложения
-          TARGET_DIR="platforms/android/app/src/main/assets/www"
-          rm -rf $TARGET_DIR/*
-          cp -r ../css $TARGET_DIR/ || true
-          cp -r ../js $TARGET_DIR/ || true
-          cp ../index.html $TARGET_DIR/ || true
-          
-          # Финальная компиляция
-          cordova build android
+          # 2. Создаем код главного экрана (WebView)
+          cat << 'EOF' > android_app/app/src/main/java/com/mygame/fpvstrike/MainActivity.java
+          package com.mygame.fpvstrike;
+          import android.app.Activity;
+          import android.os.Bundle;
+          import android.view.Window;
+          import android.view.WindowManager;
+          import android.webkit.WebSettings;
+          import android.webkit.WebView;
+          import android.webkit.WebViewClient;
 
-      - name: Upload APK
+          public class MainActivity extends Activity {
+              @Override
+              protected void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+                  requestWindowFeature(Window.FEATURE_NO_TITLE);
+                  getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
+                  
+                  WebView webView = new WebView(this);
+                  WebSettings settings = webView.getSettings();
+                  settings.setJavaScriptEnabled(true);
+                  settings.setDomStorageEnabled(true);
+                  settings.setAllowFileAccess(true);
+                  settings.setDatabaseEnabled(true);
+                  
+                  webView.setWebViewClient(new WebViewClient());
+                  webView.loadUrl("file:///android_asset/www/index.html");
+                  setContentView(webView);
+              }
+          }
+          EOF
+
+          # 3. Создаем Манифест приложения (с автоповоротом)
+          cat << 'EOF' > android_app/app/src/main/AndroidManifest.xml
+          <manifest xmlns:android="http://android.com" package="com.mygame.fpvstrike">
+              <uses-permission android:name="android.permission.INTERNET" />
+              <application android:label="FPV Strike" android:theme="@android:style/Theme.NoTitleBar.Fullscreen">
+                  <activity android:name=".MainActivity" android:exported="true" android:screenOrientation="landscape">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+          # 4. Настраиваем файлы сборки Gradle
+          echo -e "pluginManagement {\n    repositories {\n        google()\n        mavenCentral()\n        gradlePluginPortal()\n    }\n}\ndependencyResolutionManagement {\n    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)\n    repositories {\n        google()\n        mavenCentral()\n    }\n}\nrootProject.name = 'FPVStrike'" > android_app/settings.gradle
+          echo -e "plugins {\n    id 'com.android.application' version '8.1.1' apply false\n}" > android_app/build.gradle
+          echo -e "plugins {\n    id 'com.android.application'\n}\nandroid {\n    namespace 'com.mygame.fpvstrike'\n    compileSdk 33\n    defaultConfig {\n        applicationId 'com.mygame.fpvstrike'\n        minSdk 24\n        targetSdk 33\n        versionCode 1\n        versionName '1.0'\n    }\n}" > android_app/app/build.gradle
+          echo "local.properties" > android_app/.gitignore
+
+          # 5. Генерируем саму структуру Gradle-оболочки
+          cd android_app
+          gradle wrapper --gradle-version 8.1.1
+
+      - name: Build clean APK
+        run: |
+          cd android_app
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Upload Clean APK
         uses: actions/upload-artifact@v4
         with:
           name: FPV-Strike-APK
-          path: app/platforms/android/app/build/outputs/apk/debug/app-debug.apk
+          path: android_app/app/build/outputs/apk/debug/app-debug.apk
