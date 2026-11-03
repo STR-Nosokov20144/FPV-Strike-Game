@@ -10,13 +10,13 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: 'zulu'
-          java-version: '17'
+          java-version: '21'
 
       - name: Install Cordova
         run: npm install -g cordova
@@ -44,22 +44,19 @@ jobs:
             echo '</widget>' >> config.xml
           fi
           
-          # 3. Умный поиск папки с твоей игрой
-          # Ищем, в какой именно папке лежит index.html (игнорируя папку самого приложения app)
+          # 3. Умный поиск папки с игрой
           GAME_DIR=$(find .. -name "index.html" ! -path "*/app/*" -exec dirname {} \; | head -n 1)
-          
-          echo "Папка с игрой найдена тут: $GAME_DIR"
           
           # Очищаем дефолтный шаблон Cordova
           rm -rf www/*
           
-          # Копируем абсолютно ВСЁ содержимое из папки с твоей игрой в проект
+          # Копируем всё содержимое из папки с твоей игрой в проект
           cp -r $GAME_DIR/* ./www/
           
           # Синхронизируем платформу Android
           cordova prepare android
           
-          # Принудительно дублируем твои файлы прямо в финальные ассеты Android
+          # Принудительно дублируем файлы в финальные ассеты Android
           TARGET_DIR="platforms/android/app/src/main/assets/www"
           rm -rf $TARGET_DIR/*
           cp -r ./www/* $TARGET_DIR/
