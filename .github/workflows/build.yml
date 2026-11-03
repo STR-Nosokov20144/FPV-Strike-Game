@@ -27,7 +27,9 @@ jobs:
           cd app
           cordova platform add android
           rm -rf www/*
-          cp -r ../css ../js ../index.html www/ || true
+          cp -r ../css ./www/ || true
+          cp -r ../js ./www/ || true
+          cp ../index.html ./www/ || true
           cordova build android
 
       - name: Upload APK
