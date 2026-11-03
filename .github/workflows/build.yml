@@ -1,4 +1,4 @@
-name: Build Clean APK
+name: Build APK
 on: [push, workflow_dispatch]
 
 jobs:
@@ -7,107 +7,66 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Install Cordova
+        run: npm install -g cordova
 
-      - name: Create Native App Project
+      - name: Create Cordova Project
         run: |
-          # Создаем структуру папок чистого Android-проекта
-          mkdir -p src/main/java/com/mygame/fpvstrike
-          mkdir -p src/main/res/values
-          mkdir -p src/main/res/mipmap-hdpi
-          mkdir -p src/main/assets/www
+          cordova create app com.mycompany.mygame "FPV Strike"
+          cd app
+          cordova platform add android
           
-          # 1. Копируем файлы твоей игры в ассеты приложения
-          cp -r css src/main/assets/www/ || true
-          cp -r js src/main/assets/www/ || true
-          cp index.html src/main/assets/www/ || true
-          cp icon.png src/main/res/mipmap-hdpi/icon.png || true
+          # Настраиваем иконку и горизонтальный режим
+          if [ -f ../icon.png ]; then
+            cp ../icon.png ./icon.png
+            echo '<widget id="com.mycompany.mygame" version="1.0.0" xmlns="http://w3.org" xmlns:cdv="http://apache.org">' > config.xml
+            echo '  <name>FPV Strike</name>' >> config.xml
+            echo '  <description>FPV Strike Game</description>' >> config.xml
+            echo '  <author email="dev@mycompany.com" href="http://mycompany.com">Developer</author>' >> config.xml
+            echo '  <content src="index.html" />' >> config.xml
+            echo '  <icon src="icon.png" />' >> config.xml
+            echo '  <preference name="Orientation" value="landscape" />' >> config.xml
+            echo '  <preference name="SplashScreen" value="none" />' >> config.xml
+            echo '  <preference name="AutoHideSplashScreen" value="true" />' >> config.xml
+            echo '  <preference name="ShowSplashScreenSpinner" value="false" />' >> config.xml
+            echo '</widget>' >> config.xml
+          fi
           
-          # 2. Пишем чистый Java-код для WebView на весь экран
-          cat << 'EOF' > src/main/java/com/mygame/fpvstrike/MainActivity.java
-          package com.mygame.fpvstrike;
-          import android.app.Activity;
-          import android.os.Bundle;
-          import android.view.Window;
-          import android.view.WindowManager;
-          import android.webkit.WebSettings;
-          import android.webkit.WebView;
-          import android.webkit.WebViewClient;
-
-          public class MainActivity extends Activity {
-              @Override
-              protected void onCreate(Bundle savedInstanceState) {
-                  super.onCreate(savedInstanceState);
-                  requestWindowFeature(Window.FEATURE_NO_TITLE);
-                  getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
-                  
-                  WebView webView = new WebView(this);
-                  WebSettings settings = webView.getSettings();
-                  settings.setJavaScriptEnabled(true);
-                  settings.setDomStorageEnabled(true);
-                  settings.setAllowFileAccess(true);
-                  
-                  webView.setWebViewClient(new WebViewClient());
-                  webView.loadUrl("file:///android_asset/www/index.html");
-                  setContentView(webView);
-              }
-          }
-          EOF
-
-          # 3. Пишем Манифест (название, иконка, ландшафтный режим)
-          cat << 'EOF' > src/main/AndroidManifest.xml
-          <manifest xmlns:android="http://android.com" package="com.mygame.fpvstrike">
-              <uses-permission android:name="android.permission.INTERNET" />
-              <application android:label="FPV Strike" android:icon="@mipmap/icon" android:theme="@android:style/Theme.NoTitleBar.Fullscreen">
-                  <activity android:name=".MainActivity" android:exported="true" android:screenOrientation="landscape">
-                      <intent-filter>
-                          <action android:name="android.intent.action.MAIN" />
-                          <category android:name="android.intent.category.LAUNCHER" />
-                      </intent-filter>
-                  </activity>
-              </application>
-          </manifest>
-          EOF
-
-          # 4. Создаем файлы настроек для сборщика Gradle
-          echo "rootProject.name = 'FPVStrike'" > settings.gradle
+          # Запускаем подготовку платформы
+          cordova prepare android
           
-          cat << 'EOF' > build.gradle
-          buildscript {
-              repositories { google(); mavenCentral() }
-              dependencies { classpath 'com.android.tools.build:gradle:8.1.1' }
-          }
-          allprojects {
-              repositories { google(); mavenCentral() }
-          }
-          apply plugin: 'com.android.application'
-          android {
-              namespace 'com.mygame.fpvstrike'
-              compileSdk 33
-              defaultConfig {
-                  applicationId 'com.mygame.fpvstrike'
-                  minSdk 24
-                  targetSdk 33
-                  versionCode 1
-                  versionName '1.0'
-              }
-          }
-          EOF
+          # ЖЕСТКО заменяем файлы игры во ВСЕХ папках перед компиляцией
+          rm -rf www/*
+          cp -r ../css ./www/ || true
+          cp -r ../js ./www/ || true
+          cp ../index.html ./www/ || true
+          
+          TARGET_DIR="platforms/android/app/src/main/assets/www"
+          rm -rf $TARGET_DIR/*
+          cp -r ../css $TARGET_DIR/ || true
+          cp -r ../js $TARGET_DIR/ || true
+          cp ../index.html $TARGET_DIR/ || true
+          
+          # Отключаем заставку Cordova в коде Java, если она там создалась
+          find platforms/android/ -name "MainActivity.java" -exec sed -i 's/id="splash"/id="none"/g' {} + || true
 
-      - name: Build APK with Gradle
-        run: |
-          gradle assembleDebug
+          cordova build android
 
-      - name: Upload Clean APK
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: FPV-Strike-APK
-          path: app/build/outputs/apk/debug/*.apk || build/outputs/apk/debug/*.apk
+          path: app/platforms/android/app/build/outputs/apk/debug/app-debug.apk
+
 
